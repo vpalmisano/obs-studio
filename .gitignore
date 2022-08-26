@@ -43,6 +43,7 @@ GeneratedFiles/
 .vscode/
 /CI/include/*.lock.json
 install_temp/
+/plugins/obs-webrtc/webrtc/target/
 
 /other/
 
