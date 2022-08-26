@@ -3294,6 +3294,8 @@ int main(int argc, char *argv[])
 				"--unfiltered_log: Make log unfiltered.\n\n"
 				"--disable-updater: Disable built-in updater (Windows/Mac only)\n\n"
 				"--disable-missing-files-check: Disable the missing files dialog which can appear on startup.\n\n"
+				"--debug-webrtc-whip: Enable webrtc WHIP logging\n"
+				"--debug-webrtc-filter <string>: Apply log filter string, default is INFO\n\n"
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
 				"--disable-high-dpi-scaling: Disable automatic high-DPI scaling\n\n"
 #endif
