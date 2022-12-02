@@ -27,8 +27,8 @@ find_package(
              swresample)
 include_directories(${FFMPEG_INCLUDE_DIRS})
 
-set(obs-webrtc_HEADERS webrtc-stream.h)
-set(obs-webrtc_SOURCES whip.c webrtc-stream.c webrtc.c)
+set(obs-webrtc_HEADERS webrtc-output.h)
+set(obs-webrtc_SOURCES whip.c webrtc-output.c webrtc.c)
 
 if(WIN32)
   set(MODULE_DESCRIPTION "OBS webrtc module")

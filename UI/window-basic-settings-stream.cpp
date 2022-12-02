@@ -388,7 +388,7 @@ void OBSBasicSettings::LoadServices(bool showAll)
 	for (QString &name : names)
 		ui->service->addItem(name);
 
-	ui->service->insertItem(0, QTStr("WHIP"), QVariant((int)ListOpt::WHIP));
+	ui->service->insertItem(0, QTStr("WebRTC"), QVariant((int)ListOpt::WHIP));
 
 	if (!showAll) {
 		ui->service->addItem(

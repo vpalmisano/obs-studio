@@ -12,13 +12,8 @@ MODULE_EXPORT const char *obs_module_description(void)
 	return "OBS core WebRTC services";
 }
 
-#define RTMP_SERVICES_LOG_STR "[obs-webrtc-services plugin] "
-#define RTMP_SERVICES_VER_STR \
-	"obs-webrtc-services plugin (libobs " OBS_VERSION ")"
-
 extern struct obs_service_info whip_service;
 
-static update_info_t *update_info = NULL;
 static struct dstr module_name = {0};
 
 const char *get_module_name(void)

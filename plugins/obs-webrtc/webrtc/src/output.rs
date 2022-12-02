@@ -22,7 +22,7 @@ use webrtc::track::track_local::TrackLocal;
 
 use crate::whip;
 
-pub struct OBSWebRTCStream {
+pub struct OBSWebRTCOutput {
     runtime: Runtime,
     video_track: Arc<TrackLocalStaticSample>,
     audio_track: Arc<TrackLocalStaticSample>,
@@ -89,7 +89,7 @@ async fn connect(
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_stream_init(_: *const c_char) -> *mut OBSWebRTCStream {
+pub extern "C" fn obs_webrtc_output_init() -> *mut OBSWebRTCOutput {
     let video_track = Arc::new(TrackLocalStaticSample::new(
         RTCRtpCodecCapability {
             mime_type: MIME_TYPE_H264.to_owned(),
@@ -111,7 +111,7 @@ pub extern "C" fn obs_webrtc_stream_init(_: *const c_char) -> *mut OBSWebRTCStre
         "webrtc-rs".to_owned(),
     ));
 
-    Box::into_raw(Box::new(OBSWebRTCStream {
+    Box::into_raw(Box::new(OBSWebRTCOutput {
         runtime: tokio::runtime::Runtime::new().unwrap(),
         video_track: video_track,
         audio_track: audio_track,
@@ -119,7 +119,7 @@ pub extern "C" fn obs_webrtc_stream_init(_: *const c_char) -> *mut OBSWebRTCStre
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_stream_connect(obsrtc: *mut OBSWebRTCStream) {
+pub extern "C" fn obs_webrtc_output_connect(obsrtc: *mut OBSWebRTCOutput) {
     let obs_webrtc = unsafe { &*obsrtc };
     let video_track = Arc::clone(&obs_webrtc.video_track) as Arc<dyn TrackLocal + Send + Sync>;
     let audio_track = Arc::clone(&obs_webrtc.audio_track) as Arc<dyn TrackLocal + Send + Sync>;
@@ -131,8 +131,8 @@ pub extern "C" fn obs_webrtc_stream_connect(obsrtc: *mut OBSWebRTCStream) {
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_stream_data(
-    obsrtc: *mut OBSWebRTCStream,
+pub extern "C" fn obs_webrtc_output_data(
+    obsrtc: *mut OBSWebRTCOutput,
     data: *const u8,
     size: usize,
     duration: u64,
@@ -157,8 +157,8 @@ pub extern "C" fn obs_webrtc_stream_data(
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_stream_audio(
-    obsrtc: *mut OBSWebRTCStream,
+pub extern "C" fn obs_webrtc_output_audio(
+    obsrtc: *mut OBSWebRTCOutput,
     data: *const u8,
     size: usize,
     duration: u64,

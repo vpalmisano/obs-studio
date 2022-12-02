@@ -3,18 +3,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-typedef struct OBSWebRTCStream OBSWebRTCStream;
+typedef struct OBSWebRTCOutput OBSWebRTCOutput;
 
-struct OBSWebRTCStream *obs_webrtc_stream_init(const char*);
+struct OBSWebRTCOutput *obs_webrtc_output_init(void);
 
-void obs_webrtc_stream_connect(struct OBSWebRTCStream *obsrtc);
+void obs_webrtc_output_connect(struct OBSWebRTCOutput *obsrtc);
 
-void obs_webrtc_stream_data(struct OBSWebRTCStream *obsrtc,
+void obs_webrtc_output_data(struct OBSWebRTCOutput *obsrtc,
                             const uint8_t *data,
                             uintptr_t size,
                             uint64_t duration);
 
-void obs_webrtc_stream_audio(struct OBSWebRTCStream *obsrtc,
+void obs_webrtc_output_audio(struct OBSWebRTCOutput *obsrtc,
                              const uint8_t *data,
                              uintptr_t size,
                              uint64_t duration);

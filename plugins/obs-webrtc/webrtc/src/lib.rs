@@ -1,2 +1,2 @@
-mod stream;
+mod output;
 mod whip;
