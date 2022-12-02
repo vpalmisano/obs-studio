@@ -5,7 +5,7 @@
 
 typedef struct OBSWebRTCStream OBSWebRTCStream;
 
-struct OBSWebRTCStream *obs_webrtc_stream_init(const char *name);
+struct OBSWebRTCStream *obs_webrtc_stream_init(const char*);
 
 void obs_webrtc_stream_connect(struct OBSWebRTCStream *obsrtc);
 
