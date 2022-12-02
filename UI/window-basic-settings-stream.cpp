@@ -39,8 +39,12 @@ enum class Section : int {
 
 inline bool OBSBasicSettings::IsCustomService() const
 {
-	return ui->service->currentData().toInt() == (int)ListOpt::Custom ||
-	       ui->service->currentData().toInt() == (int)ListOpt::WHIP;
+	return ui->service->currentData().toInt() == (int)ListOpt::Custom;
+}
+
+inline bool OBSBasicSettings::IsWHIP() const
+{
+	return ui->service->currentData().toInt() == (int)ListOpt::WHIP;
 }
 
 void OBSBasicSettings::InitStreamPage()
@@ -121,9 +125,12 @@ void OBSBasicSettings::LoadStream1Settings()
 	const char *server = obs_data_get_string(settings, "server");
 	const char *key = obs_data_get_string(settings, "key");
 
+	if (strcmp(type, "rtmp_custom") == 0 || strcmp(type, "whip") == 0) {
+		ui->customServer->setText(server);
+	}
+
 	if (strcmp(type, "rtmp_custom") == 0) {
 		ui->service->setCurrentIndex(0);
-		ui->customServer->setText(server);
 		lastServiceIdx = 0;
 
 		bool use_auth = obs_data_get_bool(settings, "use_auth");
@@ -210,14 +217,21 @@ void OBSBasicSettings::LoadStream1Settings()
 void OBSBasicSettings::SaveStream1Settings()
 {
 	bool customServer = IsCustomService();
-	const char *service_id = customServer ? "rtmp_custom" : "rtmp_common";
+	bool whip = IsWHIP();
+	const char *service_id = "rtmp_common";
+
+	if (customServer) {
+		service_id = "rtmp_custom";
+	} else if (whip) {
+		service_id = "whip";
+	}
 
 	obs_service_t *oldService = main->GetService();
 	OBSDataAutoRelease hotkeyData = obs_hotkeys_save_service(oldService);
 
 	OBSDataAutoRelease settings = obs_data_create();
 
-	if (!customServer) {
+	if (!customServer && !whip) {
 		obs_data_set_string(settings, "service",
 				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(
@@ -260,7 +274,7 @@ void OBSBasicSettings::SaveStream1Settings()
 	obs_data_set_string(settings, "key", QT_TO_UTF8(ui->key->text()));
 
 	OBSServiceAutoRelease newService = obs_service_create(
-		"whip", "default_service", settings, hotkeyData);
+		service_id, "default_service", settings, hotkeyData);
 
 	if (!newService)
 		return;
@@ -280,7 +294,7 @@ void OBSBasicSettings::SaveStream1Settings()
 
 void OBSBasicSettings::UpdateMoreInfoLink()
 {
-	if (IsCustomService()) {
+	if (IsCustomService() || IsWHIP()) {
 		ui->moreInfoButton->hide();
 		return;
 	}
@@ -471,6 +485,7 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 
 	std::string service = QT_TO_UTF8(ui->service->currentText());
 	bool custom = IsCustomService();
+	bool whip = IsWHIP();
 
 	ui->disconnectAccount->setVisible(false);
 	ui->bandwidthTestEnable->setVisible(false);
@@ -487,7 +502,7 @@ void OBSBasicSettings::on_service_currentIndexChanged(int)
 	ui->authPwLabel->setVisible(custom);
 	ui->authPwWidget->setVisible(custom);
 
-	if (custom) {
+	if (custom || whip) {
 		ui->streamkeyPageLayout->insertRow(1, ui->serverLabel,
 						   ui->serverStackedWidget);
 
@@ -580,11 +595,18 @@ void OBSBasicSettings::on_authPwShow_clicked()
 OBSService OBSBasicSettings::SpawnTempService()
 {
 	bool custom = IsCustomService();
-	const char *service_id = custom ? "rtmp_custom" : "rtmp_common";
+	bool whip = IsWHIP();
+	const char *service_id = "rtmp_common";
+
+	if (custom) {
+		service_id = "rtmp_custom";
+	} else if (whip) {
+		service_id = "whip";
+	}
 
 	OBSDataAutoRelease settings = obs_data_create();
 
-	if (!custom) {
+	if (!custom && !whip) {
 		obs_data_set_string(settings, "service",
 				    QT_TO_UTF8(ui->service->currentText()));
 		obs_data_set_string(
