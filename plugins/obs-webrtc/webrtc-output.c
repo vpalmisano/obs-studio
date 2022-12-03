@@ -8,6 +8,8 @@ static const char *webrtc_output_getname(void *unused)
 
 static void *webrtc_output_create(obs_data_t *settings, obs_output_t *obs_output)
 {
+	UNUSED_PARAMETER(settings);
+
 	struct webrtc_output *output = bzalloc(sizeof(struct webrtc_output));
 
 	output->output = obs_output;
@@ -16,7 +18,10 @@ static void *webrtc_output_create(obs_data_t *settings, obs_output_t *obs_output
 	return output;
 }
 
-static void webrtc_output_destroy(void *data) {}
+static void webrtc_output_destroy(void *data) {
+	UNUSED_PARAMETER(data);
+
+}
 
 static bool webrtc_output_start(void *data)
 {
@@ -38,6 +43,8 @@ static bool webrtc_output_start(void *data)
 
 static void webrtc_output_stop(void *data, uint64_t ts)
 {
+	UNUSED_PARAMETER(ts);
+
 	struct webrtc_output *output = data;
 
 	obs_output_end_data_capture(output->output);
@@ -46,24 +53,27 @@ static void webrtc_output_stop(void *data, uint64_t ts)
 static void webrtc_output_data(void *data, struct encoder_packet *packet)
 {
 	struct webrtc_output *output = data;
+	int64_t duration = 0;
+	bool is_audio = false;
 
 	if (packet->type == OBS_ENCODER_VIDEO) {
-		int64_t duration = packet->dts_usec - output->video_timestamp;
-		obs_webrtc_output_data(output->obsrtc, packet->data,
-				       packet->size, duration);
+		duration = packet->dts_usec - output->video_timestamp;
 		output->video_timestamp = packet->dts_usec;
 	}
 
 	if (packet->type == OBS_ENCODER_AUDIO) {
-		int64_t duration = packet->dts_usec - output->audio_timestamp;
-		obs_webrtc_output_audio(output->obsrtc, packet->data,
-					packet->size, duration);
+		is_audio = true;
+		duration = packet->dts_usec - output->audio_timestamp;
 		output->audio_timestamp = packet->dts_usec;
 	}
+
+	obs_webrtc_output_write(output->obsrtc, packet->data, packet->size, duration, is_audio);
 }
 
 static void webrtc_output_defaults(obs_data_t *defaults)
 {
+	UNUSED_PARAMETER(defaults);
+
 }
 
 static obs_properties_t *webrtc_output_properties(void *unused)
@@ -77,18 +87,24 @@ static obs_properties_t *webrtc_output_properties(void *unused)
 
 static uint64_t webrtc_output_total_bytes_sent(void *data)
 {
+	UNUSED_PARAMETER(data);
+
 	// TODO
 	return 0;
 }
 
 static int webrtc_output_dropped_frames(void *data)
 {
+	UNUSED_PARAMETER(data);
+
 	// TODO
 	return 0;
 }
 
 static int webrtc_output_connect_time(void *data)
 {
+	UNUSED_PARAMETER(data);
+
 	// TODO
 	return 0;
 }

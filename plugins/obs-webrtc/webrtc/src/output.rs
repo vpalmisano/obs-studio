@@ -1,7 +1,6 @@
 use anyhow::Result;
 
 use std::boxed::Box;
-use std::os::raw::c_char;
 use std::slice;
 use std::sync::Arc;
 
@@ -15,12 +14,11 @@ use webrtc::api::APIBuilder;
 use webrtc::interceptor::registry::Registry;
 use webrtc::media::Sample;
 use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 use webrtc::track::track_local::TrackLocal;
-
-use crate::whip;
 
 pub struct OBSWebRTCOutput {
     runtime: Runtime,
@@ -43,6 +41,19 @@ fn add_track_to_peerconnection(
         while let Ok((_, _)) = rtp_sender.read(&mut rtcp_buf).await {}
         Result::<()>::Ok(())
     });
+}
+
+pub async fn do_whip(local_desc: RTCSessionDescription) -> Result<RTCSessionDescription> {
+    let client = reqwest::Client::new();
+    let res = client
+        .post("http://127.0.0.1:8080/api/whip")
+        .body(local_desc.sdp)
+        .send()
+        .await?;
+
+    let body = res.text().await?;
+    let sdp = RTCSessionDescription::answer(body)?;
+    Ok(sdp)
 }
 
 async fn connect(
@@ -82,7 +93,7 @@ async fn connect(
     let offer = peer_connection.create_offer(None).await?;
     peer_connection.set_local_description(offer.clone()).await?;
 
-    let answer = whip::do_whip(offer).await?;
+    let answer = do_whip(offer).await?;
     peer_connection.set_remote_description(answer).await?;
 
     Ok(())
@@ -131,37 +142,12 @@ pub extern "C" fn obs_webrtc_output_connect(obsrtc: *mut OBSWebRTCOutput) {
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_output_data(
+pub extern "C" fn obs_webrtc_output_write(
     obsrtc: *mut OBSWebRTCOutput,
     data: *const u8,
     size: usize,
     duration: u64,
-) {
-    if obsrtc.is_null() {
-        return;
-    }
-
-    let slice: &[u8] = unsafe { slice::from_raw_parts(data, size) };
-
-    let sample = Sample {
-        data: Bytes::from(slice),
-        duration: std::time::Duration::from_nanos(duration),
-        ..Default::default()
-    };
-
-    unsafe {
-        (*obsrtc).runtime.block_on(async {
-            (*obsrtc).video_track.write_sample(&sample).await;
-        });
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn obs_webrtc_output_audio(
-    obsrtc: *mut OBSWebRTCOutput,
-    data: *const u8,
-    size: usize,
-    duration: u64,
+    is_audio: bool,
 ) {
     if obsrtc.is_null() {
         return;
@@ -177,7 +163,11 @@ pub extern "C" fn obs_webrtc_output_audio(
 
     unsafe {
         (*obsrtc).runtime.block_on(async {
-            (*obsrtc).audio_track.write_sample(&sample).await;
+            if is_audio {
+                (*obsrtc).audio_track.write_sample(&sample).await;
+            } else {
+                (*obsrtc).video_track.write_sample(&sample).await;
+            }
         });
     }
 }
