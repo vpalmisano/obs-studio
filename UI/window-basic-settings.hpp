@@ -256,7 +256,7 @@ private:
 	/* stream */
 	void InitStreamPage();
 	inline bool IsCustomService() const;
-	inline bool IsWHIP() const;
+	inline bool IsWebRTC() const;
 	void LoadServices(bool showAll);
 	void OnOAuthStreamKeyConnected();
 	void OnAuthConnected();

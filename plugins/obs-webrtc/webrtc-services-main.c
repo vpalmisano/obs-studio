@@ -12,7 +12,7 @@ MODULE_EXPORT const char *obs_module_description(void)
 	return "OBS core WebRTC services";
 }
 
-extern struct obs_service_info whip_service;
+extern struct obs_service_info webrtc_service;
 
 static struct dstr module_name = {0};
 
@@ -27,7 +27,7 @@ bool obs_module_load(void)
 	dstr_cat(&module_name, obs_get_version_string());
 	dstr_cat(&module_name, ")");
 
-	obs_register_service(&whip_service);
+	obs_register_service(&webrtc_service);
 	return true;
 }
 
