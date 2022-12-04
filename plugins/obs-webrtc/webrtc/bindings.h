@@ -7,7 +7,9 @@ typedef struct OBSWebRTCOutput OBSWebRTCOutput;
 
 struct OBSWebRTCOutput *obs_webrtc_output_init(void);
 
-void obs_webrtc_output_connect(struct OBSWebRTCOutput *obsrtc);
+void obs_webrtc_output_connect(struct OBSWebRTCOutput *obsrtc,
+                               const char *url,
+                               const char *stream_key);
 
 void obs_webrtc_output_write(struct OBSWebRTCOutput *obsrtc,
                              const uint8_t *data,

@@ -1,6 +1,7 @@
 use anyhow::Result;
 
 use std::boxed::Box;
+use std::os::raw::c_char;
 use std::slice;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use bytes::Bytes;
 
 use tokio::runtime::Runtime;
 
+use reqwest::header::{HeaderValue, AUTHORIZATION};
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::api::APIBuilder;
@@ -43,10 +45,23 @@ fn add_track_to_peerconnection(
     });
 }
 
-pub async fn do_whip(local_desc: RTCSessionDescription) -> Result<RTCSessionDescription> {
+pub async fn do_whip(
+    local_desc: RTCSessionDescription,
+    url: std::string::String,
+    stream_key: std::string::String,
+) -> Result<RTCSessionDescription> {
     let client = reqwest::Client::new();
+
+    let mut headers = reqwest::header::HeaderMap::new();
+
+    headers.append(
+        AUTHORIZATION,
+        HeaderValue::from_str(&format!("Bearer {stream_key}"))?,
+    );
+
     let res = client
-        .post("http://127.0.0.1:8080/api/whip")
+        .post(url)
+        .headers(headers)
         .body(local_desc.sdp)
         .send()
         .await?;
@@ -59,6 +74,8 @@ pub async fn do_whip(local_desc: RTCSessionDescription) -> Result<RTCSessionDesc
 async fn connect(
     video_track: Arc<dyn TrackLocal + Send + Sync>,
     audio_track: Arc<dyn TrackLocal + Send + Sync>,
+    url: std::string::String,
+    stream_key: std::string::String,
 ) -> Result<()> {
     let mut m = MediaEngine::default();
     m.register_default_codecs()?;
@@ -93,7 +110,7 @@ async fn connect(
     let offer = peer_connection.create_offer(None).await?;
     peer_connection.set_local_description(offer.clone()).await?;
 
-    let answer = do_whip(offer).await?;
+    let answer = do_whip(offer, url, stream_key).await?;
     peer_connection.set_remote_description(answer).await?;
 
     Ok(())
@@ -130,13 +147,27 @@ pub extern "C" fn obs_webrtc_output_init() -> *mut OBSWebRTCOutput {
 }
 
 #[no_mangle]
-pub extern "C" fn obs_webrtc_output_connect(obsrtc: *mut OBSWebRTCOutput) {
+pub extern "C" fn obs_webrtc_output_connect(
+    obsrtc: *mut OBSWebRTCOutput,
+    url: *const c_char,
+    stream_key: *const c_char,
+) {
+    let url = unsafe { std::ffi::CStr::from_ptr(url).to_str().unwrap() };
+    let stream_key = unsafe { std::ffi::CStr::from_ptr(stream_key).to_str().unwrap() };
+
     let obs_webrtc = unsafe { &*obsrtc };
     let video_track = Arc::clone(&obs_webrtc.video_track) as Arc<dyn TrackLocal + Send + Sync>;
     let audio_track = Arc::clone(&obs_webrtc.audio_track) as Arc<dyn TrackLocal + Send + Sync>;
+
     unsafe {
-        (*obsrtc).runtime.spawn(async {
-            connect(video_track, audio_track).await;
+        (*obsrtc).runtime.spawn(async move {
+            connect(
+                video_track,
+                audio_track,
+                url.to_owned(),
+                stream_key.to_owned(),
+            )
+            .await;
         });
     }
 }

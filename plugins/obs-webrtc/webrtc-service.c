@@ -7,7 +7,7 @@ struct webrtc_service_state {
 static const char *webrtc_service_name(void *unused)
 {
 	UNUSED_PARAMETER(unused);
-	return obs_module_text("webrtc_serviceWebRTCStreaming");
+	return obs_module_text("WebRTCService");
 }
 
 static void webrtc_service_update(void *data, obs_data_t *settings)

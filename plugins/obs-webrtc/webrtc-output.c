@@ -11,7 +11,6 @@ static void *webrtc_output_create(obs_data_t *settings, obs_output_t *obs_output
 	UNUSED_PARAMETER(settings);
 
 	struct webrtc_output *output = bzalloc(sizeof(struct webrtc_output));
-
 	output->output = obs_output;
 	output->obsrtc = obs_webrtc_output_init();
 
@@ -26,6 +25,13 @@ static void webrtc_output_destroy(void *data) {
 static bool webrtc_output_start(void *data)
 {
 	struct webrtc_output *output = data;
+	obs_service_t *service;
+	const char *key, *url;
+
+	service = obs_output_get_service(output->output);
+	if (!service) {
+		return false;
+	}
 
 	if (!obs_output_can_begin_data_capture(output->output, 0)) {
 		return false;
@@ -34,7 +40,11 @@ static bool webrtc_output_start(void *data)
 		return false;
 	}
 
-	obs_webrtc_output_connect(output->obsrtc);
+	obs_webrtc_output_connect(
+			output->obsrtc,
+			obs_service_get_url(service),
+			obs_service_get_key(service)
+	);
 
 	obs_output_begin_data_capture(output->output, 0);
 
