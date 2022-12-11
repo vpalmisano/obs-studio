@@ -12,14 +12,20 @@ static void *webrtc_output_create(obs_data_t *settings, obs_output_t *obs_output
 
 	struct webrtc_output *output = bzalloc(sizeof(struct webrtc_output));
 	output->output = obs_output;
-	output->obsrtc = obs_webrtc_output_init();
+	output->obsrtc = obs_webrtc_output_new();
+
+	if (!output->obsrtc) {
+		bfree(output);
+		blog(LOG_ERROR, "Unable to initialize webrtc output");
+		return NULL;
+	}
 
 	return output;
 }
 
 static void webrtc_output_destroy(void *data) {
 	UNUSED_PARAMETER(data);
-
+	obs_webrtc_output_free(data);
 }
 
 static bool webrtc_output_start(void *data)
