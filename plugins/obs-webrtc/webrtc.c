@@ -15,6 +15,8 @@ struct gs_texture *webrtcTexture;
 
 bool obs_module_load(void)
 {
+	obs_webrtc_install_logger();
+
 	obs_register_output(&webrtc_output_info);
 	obs_register_service(&webrtc_service_info);
 	return true;

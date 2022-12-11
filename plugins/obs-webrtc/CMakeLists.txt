@@ -41,8 +41,21 @@ add_library(obs-webrtc MODULE ${obs-webrtc_SOURCES} ${obs-webrtc_HEADERS})
 
 corrosion_import_crate(MANIFEST_PATH webrtc/Cargo.toml)
 
-target_link_libraries(obs-webrtc libobs webrtc-rs-lib ${OBS_JANSSON_IMPORT}
-                      ${LIBCURL_LIBRARIES} ${FFMPEG_LIBRARIES})
+# Doesn't work for deps
+#if(OS_MACOS)
+#  corrosion_set_env_vars(webrtc-rs-lib MACOSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET})
+#endif()
+
+target_link_libraries(obs-webrtc libobs webrtc-rs-lib
+${OBS_JANSSON_IMPORT} ${LIBCURL_LIBRARIES} ${FFMPEG_LIBRARIES})
+
+if(OS_MACOS)
+  find_library(COREFOUNDATION CoreFoundation)
+  find_library(SECURITY_FRAMEWORK Security)
+  mark_as_advanced(COREFOUNDATION SECURITY_FRAMEWORK)
+  target_link_libraries(obs-webrtc ${COREFOUNDATION} ${SECURITY_FRAMEWORK})
+endif()
+
 set_target_properties(obs-webrtc PROPERTIES FOLDER "plugins")
 
 setup_plugin_target(obs-webrtc data)

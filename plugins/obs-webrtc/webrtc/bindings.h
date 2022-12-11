@@ -16,3 +16,5 @@ void obs_webrtc_output_write(struct OBSWebRTCOutput *obsrtc,
                              uintptr_t size,
                              uint64_t duration,
                              bool is_audio);
+
+void obs_webrtc_install_logger(void);
