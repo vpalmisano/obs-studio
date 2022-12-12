@@ -1,9 +1,9 @@
 use crate::whip;
-use anyhow::{Result, anyhow};
+use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use log::{debug, error, info};
 use std::boxed::Box;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::api::APIBuilder;
@@ -12,17 +12,19 @@ use webrtc::interceptor::registry::Registry;
 use webrtc::media::Sample;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
+use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 
 pub struct OutputStream {
-    pub(crate) video_track: Arc<TrackLocalStaticSample>,
-    pub(crate) audio_track: Arc<TrackLocalStaticSample>,
+    video_track: Arc<TrackLocalStaticSample>,
+    audio_track: Arc<TrackLocalStaticSample>,
+    peer_connection: Arc<RTCPeerConnection>,
 }
 
 impl OutputStream {
-    pub fn new() -> Result<Self> {
+    pub async fn new() -> Result<Self> {
         let video_track = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_H264.to_owned(),
@@ -44,20 +46,6 @@ impl OutputStream {
             "webrtc-rs".to_owned(),
         ));
 
-        Ok(Self {
-            audio_track,
-            video_track,
-        })
-    }
-
-    pub async fn connect(
-        &self,
-        url: &str,
-        stream_key: &str,
-    ) -> Result<()>
-    {
-        println!("Setting up webrtc!");
-
         let mut m = MediaEngine::default();
         m.register_default_codecs()?;
 
@@ -76,28 +64,39 @@ impl OutputStream {
 
         let peer_connection = Arc::new(api.new_peer_connection(config).await?);
 
-        peer_connection.add_transceiver_from_track(self.video_track.clone(), &[RTCRtpTransceiverInit {
+        Ok(Self {
+            audio_track,
+            video_track,
+            peer_connection,
+        })
+    }
+
+    pub async fn connect(&self, url: &str, stream_key: &str) -> Result<()> {
+        println!("Setting up webrtc!");
+
+        self.peer_connection.add_transceiver_from_track(self.video_track.clone(), &[RTCRtpTransceiverInit {
             direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
             send_encodings: Vec::new()
         }]).await?;
 
-        peer_connection.add_transceiver_from_track(self.audio_track.clone(), &[RTCRtpTransceiverInit {
+        self.peer_connection.add_transceiver_from_track(self.audio_track.clone(), &[RTCRtpTransceiverInit {
             direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
             send_encodings: Vec::new()
         }]).await?;
 
-        peer_connection.on_ice_connection_state_change(Box::new(
-            move |connection_state: RTCIceConnectionState| {
-                info!("Connection State has changed {}", connection_state);
-                if connection_state == RTCIceConnectionState::Connected {
-                    // on_success();
-                }
-                Box::pin(async {})
-            },
-        ));
+        self.peer_connection
+            .on_ice_connection_state_change(Box::new(
+                move |connection_state: RTCIceConnectionState| {
+                    info!("Connection State has changed {}", connection_state);
+                    if connection_state == RTCIceConnectionState::Connected {
+                        // on_success();
+                    }
+                    Box::pin(async {})
+                },
+            ));
 
-        peer_connection.on_peer_connection_state_change(Box::new(
-            move |s: RTCPeerConnectionState| {
+        self.peer_connection
+            .on_peer_connection_state_change(Box::new(move |s: RTCPeerConnectionState| {
                 debug!("Peer Connection State has changed: {}", s);
 
                 if s == RTCPeerConnectionState::Failed {
@@ -105,24 +104,28 @@ impl OutputStream {
                 }
 
                 Box::pin(async {})
-            },
-        ));
+            }));
 
-        let offer = peer_connection.create_offer(None).await?;
-        let mut gather_complete = peer_connection.gathering_complete_promise().await;
-        peer_connection.set_local_description(offer).await?;
+        let offer = self.peer_connection.create_offer(None).await?;
+        let mut gather_complete = self.peer_connection.gathering_complete_promise().await;
+        self.peer_connection.set_local_description(offer).await?;
 
         // Block until gathering complete
         let _ = gather_complete.recv().await;
 
-        let offer = peer_connection
+        let offer = self
+            .peer_connection
             .local_description()
             .await
             .ok_or_else(|| anyhow!("No local description available"))?;
         let answer = whip::offer(&url, stream_key, offer).await?;
-        peer_connection.set_remote_description(answer).await?;
+        self.peer_connection.set_remote_description(answer).await?;
 
         Ok(())
+    }
+
+    pub async fn close(&self) -> Result<()> {
+        Ok(self.peer_connection.close().await?)
     }
 
     pub async fn write_video(&self, data: &[u8], duration: u64) -> Result<()> {
@@ -132,7 +135,14 @@ impl OutputStream {
             ..Default::default()
         };
 
-        self.video_track.write_sample(&sample).await?;
+        match self.peer_connection.connection_state() {
+            s @ RTCPeerConnectionState::Failed | s @ RTCPeerConnectionState::Closed => {
+                bail!("Invalid connection state for write_video: {s}",)
+            }
+            _ => {
+                self.video_track.write_sample(&sample).await?;
+            }
+        }
         return Ok(());
     }
 
@@ -143,7 +153,14 @@ impl OutputStream {
             ..Default::default()
         };
 
-        self.audio_track.write_sample(&sample).await?;
+        match self.peer_connection.connection_state() {
+            s @ RTCPeerConnectionState::Failed | s @ RTCPeerConnectionState::Closed => {
+                bail!("Invalid connection state for write_audio: {s}",)
+            }
+            _ => {
+                self.audio_track.write_sample(&sample).await?;
+            }
+        }
         return Ok(());
     }
 }

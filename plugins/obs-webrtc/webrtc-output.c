@@ -11,21 +11,27 @@ static void *webrtc_output_create(obs_data_t *settings, obs_output_t *obs_output
 	UNUSED_PARAMETER(settings);
 
 	struct webrtc_output *output = bzalloc(sizeof(struct webrtc_output));
-	output->output = obs_output;
-	output->obsrtc = obs_webrtc_output_new();
+	pthread_mutex_init_value(&output->write_mutex);
 
-	if (!output->obsrtc) {
-		bfree(output);
-		blog(LOG_ERROR, "Unable to initialize webrtc output");
-		return NULL;
-	}
+	output->output = obs_output;
+	output->obsrtc = NULL;
+
+	if (pthread_mutex_init(&output->write_mutex, NULL) != 0)
+		goto fail;
 
 	return output;
+fail:
+	pthread_mutex_destroy(&output->write_mutex);
+	bfree(output);
+	return NULL;
 }
 
 static void webrtc_output_destroy(void *data) {
-	UNUSED_PARAMETER(data);
-	obs_webrtc_output_free(data);
+	struct webrtc_output *output = data;
+	if (output->obsrtc)
+		obs_webrtc_output_free(output->obsrtc);
+	pthread_mutex_destroy(&output->write_mutex);
+	bfree(output);
 }
 
 static bool webrtc_output_start(void *data)
@@ -46,6 +52,12 @@ static bool webrtc_output_start(void *data)
 		return false;
 	}
 
+	output->obsrtc = obs_webrtc_output_new();
+	if (!output->obsrtc) {
+		blog(LOG_ERROR, "Unable to initialize webrtc output");
+		return false;
+	}
+
 	obs_webrtc_output_connect(
 			output->obsrtc,
 			obs_service_get_url(service),
@@ -57,6 +69,14 @@ static bool webrtc_output_start(void *data)
 	return true;
 }
 
+static void webrtc_output_close_unsafe(struct webrtc_output *output) {
+	if (output) {
+		obs_webrtc_output_close(output->obsrtc);
+		obs_webrtc_output_free(output->obsrtc);
+		output->obsrtc = NULL;
+	}
+}
+
 static void webrtc_output_stop(void *data, uint64_t ts)
 {
 	UNUSED_PARAMETER(ts);
@@ -64,6 +84,10 @@ static void webrtc_output_stop(void *data, uint64_t ts)
 	struct webrtc_output *output = data;
 
 	obs_output_end_data_capture(output->output);
+
+	pthread_mutex_lock(&output->write_mutex);
+	webrtc_output_close_unsafe(output);
+	pthread_mutex_unlock(&output->write_mutex);
 }
 
 static void webrtc_output_data(void *data, struct encoder_packet *packet)
@@ -83,7 +107,15 @@ static void webrtc_output_data(void *data, struct encoder_packet *packet)
 		output->audio_timestamp = packet->dts_usec;
 	}
 
-	obs_webrtc_output_write(output->obsrtc, packet->data, packet->size, duration, is_audio);
+	pthread_mutex_lock(&output->write_mutex);
+	if (output->obsrtc) {
+		if (!obs_webrtc_output_write(output->obsrtc, packet->data, packet->size, duration, is_audio)) {
+			// For now, all write errors are treated as connectivity issues that cannot be recovered from
+			obs_output_signal_stop(output->output, OBS_OUTPUT_ERROR);
+			webrtc_output_close_unsafe(output);
+		}
+	}
+	pthread_mutex_unlock(&output->write_mutex);
 }
 
 static void webrtc_output_defaults(obs_data_t *defaults)

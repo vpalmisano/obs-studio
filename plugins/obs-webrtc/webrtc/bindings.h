@@ -13,7 +13,9 @@ void obs_webrtc_output_connect(const struct OBSWebRTCOutput *output,
                                const char *url,
                                const char *stream_key);
 
-void obs_webrtc_output_write(const struct OBSWebRTCOutput *output,
+void obs_webrtc_output_close(const struct OBSWebRTCOutput *output);
+
+bool obs_webrtc_output_write(const struct OBSWebRTCOutput *output,
                              const uint8_t *data,
                              uintptr_t size,
                              uint64_t duration,
