@@ -1,4 +1,3 @@
-use std::path::PathBuf;
 use std::env;
 
 fn main() {
@@ -11,7 +10,7 @@ fn main() {
 
     match cbindgen::generate_with_config(&crate_dir, config) {
         Ok(bindings) => bindings.write_to_file("./bindings.h"),
-        Err(cbindgen::Error::ParseSyntaxError { .. }) => return, // ignore in favor of cargo's syntax check
+        Err(cbindgen::Error::ParseSyntaxError { .. }) => false, // ignore in favor of cargo's syntax check
         Err(err) => panic!("{:?}", err)
     };
 }

@@ -135,10 +135,15 @@ static obs_properties_t *webrtc_output_properties(void *unused)
 
 static uint64_t webrtc_output_total_bytes_sent(void *data)
 {
-	UNUSED_PARAMETER(data);
+	struct webrtc_output *output = data;
+	pthread_mutex_lock(&output->write_mutex);
+	uint64_t bytes_sent = 0;
+	if (output->obsrtc) {
+		bytes_sent = obs_webrtc_output_bytes_sent(output->obsrtc);
+	}
+	pthread_mutex_unlock(&output->write_mutex);
 
-	// TODO
-	return 0;
+	return bytes_sent;
 }
 
 static int webrtc_output_dropped_frames(void *data)

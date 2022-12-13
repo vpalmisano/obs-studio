@@ -61,7 +61,7 @@ impl Log for ObsLogger {
                     } else {
                         record.target()
                     },
-                    record.line().unwrap_or(0).to_string(),
+                    record.line().unwrap_or(0),
                     record.args()
                 )
                 .as_ptr() as *const i8,

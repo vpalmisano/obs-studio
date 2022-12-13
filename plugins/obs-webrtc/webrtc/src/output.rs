@@ -2,8 +2,13 @@ use crate::whip;
 use anyhow::{anyhow, bail, Result};
 use bytes::Bytes;
 use log::{debug, error, info};
+use tokio::task::JoinHandle;
 use std::boxed::Box;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use tokio::select;
+use tokio::sync::broadcast::{self, Sender};
+use tokio::time::interval;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::{MediaEngine, MIME_TYPE_H264, MIME_TYPE_OPUS};
 use webrtc::api::APIBuilder;
@@ -15,12 +20,16 @@ use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
+use webrtc::stats::StatsReportType;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
 
 pub struct OutputStream {
     video_track: Arc<TrackLocalStaticSample>,
     audio_track: Arc<TrackLocalStaticSample>,
     peer_connection: Arc<RTCPeerConnection>,
+    done_tx: Sender<()>,
+    bytes_sent: Arc<Mutex<u64>>,
+    stats_future: Arc<Mutex<Option<JoinHandle<()>>>>
 }
 
 impl OutputStream {
@@ -63,11 +72,39 @@ impl OutputStream {
         };
 
         let peer_connection = Arc::new(api.new_peer_connection(config).await?);
+        let bytes_sent = Arc::new(Mutex::new(0));
+
+        let (done_tx, mut done_rx) = broadcast::channel(1);
+        let mut interval = interval(Duration::from_millis(200));
+        let stats_future = tokio::spawn({
+            let peer_connection = peer_connection.clone();
+            let bytes_sent = bytes_sent.clone();
+            async move {
+                loop {
+                    select! {
+                        _ = done_rx.recv() => {
+                            break;
+                        }
+                        _ = interval.tick() => {
+                            let stats = peer_connection.get_stats().await;
+                            if let Some(StatsReportType::Transport(stats)) = stats.reports.get("ice_transport") {
+                                *bytes_sent.lock().unwrap() = stats.bytes_sent as u64;
+                            }
+
+                        }
+                    }
+                }
+                info!("Exiting stats thread");
+            }
+        });
 
         Ok(Self {
             audio_track,
             video_track,
             peer_connection,
+            done_tx,
+            bytes_sent,
+            stats_future: Arc::new(Mutex::new(Some(stats_future)))
         })
     }
 
@@ -118,13 +155,19 @@ impl OutputStream {
             .local_description()
             .await
             .ok_or_else(|| anyhow!("No local description available"))?;
-        let answer = whip::offer(&url, stream_key, offer).await?;
+        let answer = whip::offer(url, stream_key, offer).await?;
         self.peer_connection.set_remote_description(answer).await?;
 
         Ok(())
     }
 
     pub async fn close(&self) -> Result<()> {
+        let _ = self.done_tx.send(());
+        // If we have a stats future, await it after sending done
+        let stats_future = self.stats_future.lock().unwrap().take();
+        if let Some(stats_future) = stats_future {
+            stats_future.await;
+        }
         Ok(self.peer_connection.close().await?)
     }
 
@@ -143,7 +186,11 @@ impl OutputStream {
                 self.video_track.write_sample(&sample).await?;
             }
         }
-        return Ok(());
+        Ok(())
+    }
+
+    pub fn bytes_sent(&self) -> u64 {
+        *self.bytes_sent.lock().unwrap()
     }
 
     pub async fn write_audio(&self, data: &[u8], duration: u64) -> Result<()> {
@@ -161,6 +208,6 @@ impl OutputStream {
                 self.audio_track.write_sample(&sample).await?;
             }
         }
-        return Ok(());
+        Ok(())
     }
 }

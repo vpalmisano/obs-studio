@@ -27,6 +27,9 @@ pub extern "C" fn obs_webrtc_output_new() -> *mut OBSWebRTCOutput {
     })
 }
 
+///
+/// # Safety
+/// Called only from C
 #[no_mangle]
 pub unsafe extern "C" fn obs_webrtc_output_free(output: *mut OBSWebRTCOutput) {
     info!("Freeing webrtc output");
@@ -35,21 +38,41 @@ pub unsafe extern "C" fn obs_webrtc_output_free(output: *mut OBSWebRTCOutput) {
     }
 }
 
+///
+/// # Safety
+/// Called only from C
 #[no_mangle]
-pub extern "C" fn obs_webrtc_output_connect(
+pub unsafe extern "C" fn obs_webrtc_output_bytes_sent(output: &'static OBSWebRTCOutput) -> u64 {
+    output.stream.bytes_sent()
+}
+
+///
+/// # Safety
+/// Called only from C
+#[no_mangle]
+pub unsafe extern "C" fn obs_webrtc_output_connect(
     output: &'static OBSWebRTCOutput,
     url: *const c_char,
     stream_key: *const c_char,
 ) {
-    let url = unsafe { std::ffi::CStr::from_ptr(url).to_str().unwrap() }.to_owned();
-    let stream_key = unsafe { std::ffi::CStr::from_ptr(stream_key).to_str().unwrap() }.to_owned();
+    let url = std::ffi::CStr::from_ptr(url).to_str().unwrap().to_owned();
+    let stream_key = std::ffi::CStr::from_ptr(stream_key)
+        .to_str()
+        .unwrap()
+        .to_owned();
 
     output.runtime.spawn(async move {
-        output
-            .stream
-            .connect(&url, &stream_key)
-            .await
-            .unwrap_or_else(|e| error!("Failed connecting to webrtc output: {e:?}"));
+        let result = output.stream.connect(&url, &stream_key).await;
+        if let Err(e) = result {
+            error!("Failed connecting to webrtc output: {e:?}");
+            // Close the peer connection so that future writes fail and disconnect the output
+            // TODO: There should be some nuance about a connection failure and a mid-connection failure
+            output
+                .stream
+                .close()
+                .await
+                .unwrap_or_else(|e| error!("Failed closing webrtc output after error: {e:?}"));
+        }
     });
 }
 
@@ -62,15 +85,18 @@ pub extern "C" fn obs_webrtc_output_close(output: &'static OBSWebRTCOutput) {
         .unwrap_or_else(|e| error!("Failed closing webrtc output: {e:?}"))
 }
 
+///
+/// # Safety
+/// Called only from C
 #[no_mangle]
-pub extern "C" fn obs_webrtc_output_write(
+pub unsafe extern "C" fn obs_webrtc_output_write(
     output: &'static OBSWebRTCOutput,
     data: *const u8,
     size: usize,
     duration: u64,
     is_audio: bool,
 ) -> bool {
-    let slice: &[u8] = unsafe { slice::from_raw_parts(data, size) };
+    let slice: &[u8] = slice::from_raw_parts(data, size);
     output
         .runtime
         .block_on(async {
