@@ -5,7 +5,7 @@ OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-webrtc", "en-US")
 MODULE_EXPORT const char *obs_module_description(void)
 {
-	return "OBS webrtc module";
+	return obs_module_text("OBSWebRTC.Plugin.Description");
 }
 
 extern struct obs_output_info whip_output_info;
