@@ -78,13 +78,7 @@
             "type": "dir",
             "path": "."
         },
-        "../../plugins/obs-webrtc/webrtc/corrosion-cargo-sources.json",
-        {
-          "type": "shell",
-          "commands": [
-            "CARGO_HOME=./cargo cargo fetch --manifest-path ./generator/Cargo.toml"
-          ]
-        }
+        "../../plugins/obs-webrtc/webrtc/corrosion-cargo-sources.json"
       ]
     },
     {
@@ -484,13 +478,7 @@
           "type": "dir",
           "path": "../../"
         },
-        "../../plugins/obs-webrtc/webrtc/obs-cargo-sources.json",
-        {
-          "type": "shell",
-          "commands": [
-            "CARGO_HOME=./cargo cargo fetch --manifest-path ./plugins/obs-webrtc/webrtc/Cargo.toml"
-          ]
-        }
+        "../../plugins/obs-webrtc/webrtc/obs-cargo-sources.json"
       ]
     }
   ]
