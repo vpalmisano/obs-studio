@@ -44,25 +44,45 @@ pub struct OutputStream {
     whip_resource: Arc<Mutex<Option<Url>>>,
 }
 
-impl OutputStream {
-    pub async fn new() -> Result<Self> {
-        let video_track = Arc::new(TrackLocalStaticSample::new(
-            RTCRtpCodecCapability {
+pub enum MimeType {
+    H264,
+    H265,
+    OPUS
+}
+
+impl MimeType {
+    fn to_capability(&self) -> RTCRtpCodecCapability {
+        match self {
+            MimeType::H264 => RTCRtpCodecCapability {
                 mime_type: MIME_TYPE_H264.to_owned(),
                 clock_rate: 90000,
                 sdp_fmtp_line: "profile-level-id=428014; max-fs=3600; max-mbps=108000; max-br=1400"
                     .to_string(),
                 ..Default::default()
             },
+            MimeType::H265 => RTCRtpCodecCapability {
+                mime_type: "video/H265".to_owned(),
+                clock_rate: 90000,
+                ..Default::default()
+            },
+            MimeType::OPUS => RTCRtpCodecCapability {
+                mime_type: MIME_TYPE_OPUS.to_owned(),
+                ..Default::default()
+            },
+        }
+    }
+}
+
+impl OutputStream {
+    pub async fn new(video: MimeType, audio: MimeType) -> Result<Self> {
+        let video_track = Arc::new(TrackLocalStaticSample::new(
+            video.to_capability(),
             "video".to_owned(),
             "webrtc-rs".to_owned(),
         ));
 
         let audio_track = Arc::new(TrackLocalStaticSample::new(
-            RTCRtpCodecCapability {
-                mime_type: MIME_TYPE_OPUS.to_owned(),
-                ..Default::default()
-            },
+            audio.to_capability(),
             "audio".to_owned(),
             "webrtc-rs".to_owned(),
         ));

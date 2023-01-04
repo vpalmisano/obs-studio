@@ -37,12 +37,20 @@ static void whip_output_destroy(void *data)
 	bfree(output);
 }
 
+
+
 static bool whip_output_start(void *data)
 {
 	struct whip_output *output = data;
 	obs_service_t *service;
 	obs_data_t *service_settings;
 	const char *url, *bearer_token;
+
+	const char *video_codec =
+		obs_encoder_get_codec(obs_output_get_video_encoder(output->output));
+
+	const char *audio_codec =
+		obs_encoder_get_codec(obs_output_get_audio_encoder(output->output, 0));
 
 	service = obs_output_get_service(output->output);
 	if (!service)
@@ -54,7 +62,8 @@ static bool whip_output_start(void *data)
 	if (!obs_output_initialize_encoders(output->output, 0))
 		return false;
 
-	output->whip_output = obs_webrtc_whip_output_new();
+	output->whip_output = obs_webrtc_whip_output_new(video_codec, audio_codec);
+
 	if (!output->whip_output) {
 		blog(LOG_ERROR, "Unable to initialize whip output");
 		return false;
@@ -182,7 +191,7 @@ static int whip_output_connect_time_ms(void *data)
 struct obs_output_info whip_output_info = {
 	.id = "whip_output",
 	.flags = OBS_OUTPUT_AV | OBS_OUTPUT_ENCODED | OBS_OUTPUT_SERVICE,
-	.encoded_video_codecs = "h264",
+	.encoded_video_codecs = "h264;hevc",
 	.encoded_audio_codecs = "opus",
 	.get_name = whip_output_getname,
 	.create = whip_output_create,

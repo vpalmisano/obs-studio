@@ -1,5 +1,5 @@
-use crate::output::OutputStream;
-use anyhow::Result;
+use crate::output::{MimeType, OutputStream};
+use anyhow::{anyhow, Result};
 use log::{error, info};
 use std::{os::raw::c_char, slice, time::Duration};
 use tokio::runtime::Runtime;
@@ -13,10 +13,37 @@ pub struct OBSWebRTCWHIPOutput {
 /// # Note
 /// You must call `obs_webrtc_whip_output_free` on the returned value
 #[no_mangle]
-pub extern "C" fn obs_webrtc_whip_output_new() -> *mut OBSWebRTCWHIPOutput {
+pub extern "C" fn obs_webrtc_whip_output_new(
+    video_codec: *const c_char,
+    audio_codec: *const c_char,
+) -> *mut OBSWebRTCWHIPOutput {
+    let video_codec = unsafe {
+        std::ffi::CStr::from_ptr(video_codec)
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+    let audio_codec = unsafe {
+        std::ffi::CStr::from_ptr(audio_codec)
+            .to_str()
+            .unwrap()
+            .to_owned()
+    };
+
+    let mime_by_codec = |codec: &str| -> Result<MimeType> {
+        match codec {
+            "h264" => Ok(MimeType::H264),
+            "hevc" => Ok(MimeType::H265),
+            "opus" => Ok(MimeType::OPUS),
+            c => Err(anyhow!("Invalid codec: {c}")),
+        }
+    };
+
     (|| -> Result<*mut OBSWebRTCWHIPOutput> {
         let runtime = tokio::runtime::Runtime::new()?;
-        let stream = runtime.block_on(async { OutputStream::new().await })?;
+        let stream = runtime.block_on(async {
+            OutputStream::new(mime_by_codec(&video_codec)?, mime_by_codec(&audio_codec)?).await
+        })?;
         Ok(Box::into_raw(Box::new(OBSWebRTCWHIPOutput {
             stream,
             runtime,
