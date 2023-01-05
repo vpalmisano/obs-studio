@@ -1,12 +1,31 @@
-use crate::output::OutputStream;
+use crate::output::{EncodedPacket, EncodedPacketType, OutputStream, OutputStreamError};
 use anyhow::Result;
 use log::{error, info};
-use std::{os::raw::c_char, slice, time::Duration};
+use std::{
+    os::raw::{c_char, c_void},
+    slice,
+    time::Duration,
+};
 use tokio::runtime::Runtime;
 
 pub struct OBSWebRTCWHIPOutput {
     stream: OutputStream,
     runtime: Runtime,
+}
+/// cbindgen:prefix-with-name
+#[repr(C)]
+pub enum OBSWebRTCWHIPOutputError {
+    ConnectFailed,
+    NetworkError,
+}
+
+impl From<OutputStreamError> for OBSWebRTCWHIPOutputError {
+    fn from(ose: OutputStreamError) -> Self {
+        match ose {
+            OutputStreamError::ConnectFailed => OBSWebRTCWHIPOutputError::ConnectFailed,
+            OutputStreamError::NetworkError => OBSWebRTCWHIPOutputError::NetworkError,
+        }
+    }
 }
 
 /// Create a new whip output in rust and leak the pointer to caller
@@ -120,7 +139,10 @@ pub extern "C" fn obs_webrtc_whip_output_close(output: &'static OBSWebRTCWHIPOut
     info!("Closing whip output");
     output
         .runtime
-        .block_on(async { output.stream.close().await })
+        .block_on(async {
+            info!("I'm on a thread!");
+            output.stream.close().await
+        })
         .unwrap_or_else(|e| error!("Failed closing whip output: {e:?}"))
 }
 
@@ -136,25 +158,47 @@ pub unsafe extern "C" fn obs_webrtc_whip_output_write(
     is_audio: bool,
 ) -> bool {
     let slice: &[u8] = slice::from_raw_parts(data, size);
+    let encoded_packet = EncodedPacket {
+        data: slice.to_owned(),
+        duration: Duration::from_micros(duration),
+        typ: if is_audio {
+            EncodedPacketType::Audio
+        } else {
+            EncodedPacketType::Video
+        },
+    };
+
     output
-        .runtime
-        .block_on(async {
-            if is_audio {
-                output
-                    .stream
-                    .write_audio(slice, Duration::from_micros(duration))
-                    .await
-                    .map(|_| true)
-            } else {
-                output
-                    .stream
-                    .write_video(slice, Duration::from_micros(duration))
-                    .await
-                    .map(|_| true)
-            }
-        })
+        .stream
+        .write(encoded_packet)
+        .map(|_| true)
         .unwrap_or_else(|e| {
             error!("Failed to write packets to whip output: {e:?}");
             false
         })
+}
+
+pub struct ErrorCallbackUserdata(*mut c_void);
+unsafe impl Send for ErrorCallbackUserdata {}
+unsafe impl Sync for ErrorCallbackUserdata {}
+
+impl ErrorCallbackUserdata {
+    fn as_ptr(&self) -> *mut c_void {
+        self.0
+    }
+}
+
+type OBSWebRTCWHIPOutputErrorCallback =
+    unsafe extern "C" fn(user_data: *mut c_void, error: OBSWebRTCWHIPOutputError);
+
+#[no_mangle]
+pub unsafe extern "C" fn obs_webrtc_whip_output_set_error_callback(
+    output: &'static OBSWebRTCWHIPOutput,
+    cb: OBSWebRTCWHIPOutputErrorCallback,
+    user_data: *mut c_void,
+) {
+    let user_data = ErrorCallbackUserdata(user_data);
+    output
+        .stream
+        .set_error_callback(Box::new(move |error| cb(user_data.as_ptr(), error.into())))
 }
