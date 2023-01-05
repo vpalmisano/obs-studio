@@ -1,12 +1,14 @@
 use anyhow::Result;
 use log::{info, warn};
 use reqwest::{
-    header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE, LOCATION},
+    header::{HeaderValue, AUTHORIZATION, CONTENT_TYPE, LOCATION, USER_AGENT},
     Url,
 };
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::obs_log;
+
+const OBS_VERSION: &'static str = env!("OBS_VERSION");
 
 pub async fn offer(
     url: &str,
@@ -17,6 +19,10 @@ pub async fn offer(
 
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/sdp"));
+    headers.insert(
+        USER_AGENT,
+        HeaderValue::from_str(&format!("libobs/{OBS_VERSION}"))?,
+    );
 
     if let Some(bearer_token) = bearer_token {
         if !bearer_token.is_empty() {
@@ -64,7 +70,10 @@ pub async fn offer(
 pub async fn delete(url: &Url) -> Result<()> {
     let client = reqwest::Client::new();
 
-    let request = client.delete(url.to_owned());
+    let request = client.delete(url.to_owned()).header(
+        USER_AGENT,
+        HeaderValue::from_str(&format!("libobs/{OBS_VERSION}"))?,
+    );
 
     if obs_log::debug_whip() {
         info!("[WHIP DEBUG | CAUTION SENSITIVE INFO] Delete request {request:#?}");

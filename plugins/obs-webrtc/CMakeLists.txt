@@ -13,8 +13,9 @@ endif()
 set(OBS_WEBRTC_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 
 corrosion_import_crate(MANIFEST_PATH webrtc/Cargo.toml)
-corrosion_set_env_vars(webrtc-rs-lib
-                       "OBS_WEBRTC_GENERATED_DIR=${OBS_WEBRTC_GENERATED_DIR}")
+corrosion_set_env_vars(
+  webrtc-rs-lib "OBS_WEBRTC_GENERATED_DIR=${OBS_WEBRTC_GENERATED_DIR}"
+  "OBS_WEBRTC_OBS_VERSION=${OBS_VERSION_CANONICAL}")
 
 # Force dependent crates to link against the correct deployment target
 if(OS_MACOS)

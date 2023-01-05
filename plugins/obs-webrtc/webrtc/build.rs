@@ -3,6 +3,10 @@ use std::{env, path::PathBuf};
 fn main() {
     let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let bindings_dir = env::var("OBS_WEBRTC_GENERATED_DIR").ok();
+    let version = env::var("OBS_WEBRTC_OBS_VERSION").unwrap_or_else(|_| "0.0.0".into());
+
+    // Make libobs version available
+    println!("cargo:rustc-env=OBS_VERSION={version}");
 
     let config = cbindgen::Config {
         language: cbindgen::Language::C,
