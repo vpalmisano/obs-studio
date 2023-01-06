@@ -8,7 +8,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::obs_log;
 
-const OBS_VERSION: &'static str = env!("OBS_VERSION");
+const OBS_VERSION: &str = env!("OBS_VERSION");
 
 pub async fn offer(
     url: &str,

@@ -39,15 +39,22 @@ pub enum EncodedPacketType {
     Video,
 }
 
+/// Errors for [`OutputStream`] worker thread
 #[derive(Debug)]
 pub enum OutputStreamError {
     ConnectFailed,
     NetworkError,
+    WriteError(webrtc::Error),
 }
 
 #[derive(Debug)]
 pub enum Message {
     Packet(EncodedPacket),
+    Error(OutputStreamError),
+    Close,
+}
+
+pub enum WorkerResult {
     Error(OutputStreamError),
     Close,
 }
@@ -67,12 +74,86 @@ pub struct OutputStream {
     peer_connection: Arc<RTCPeerConnection>,
     stats: Arc<RwLock<OutputStreamStats>>,
     worker_tx: UnboundedSender<Message>,
-    worker_future: Arc<Mutex<Option<JoinHandle<()>>>>,
+    worker_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
     whip_resource: Arc<Mutex<Option<Url>>>,
     error_callback: Arc<Mutex<Option<ErrorCallback>>>,
 }
 
 impl OutputStream {
+    fn start_worker(&mut self, mut worker_rx: UnboundedReceiver<Message>) {
+        let worker_handle = std::thread::spawn({
+            let audio_track = self.audio_track.clone();
+            let video_track = self.video_track.clone();
+            let peer_connection = self.peer_connection.clone();
+            let stats = self.stats.clone();
+            let error_callback = self.error_callback.clone();
+            move || {
+                let runtime = tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .thread_name("webrtc_worker")
+                    .worker_threads(4)
+                    .build()
+                    .unwrap();
+                let runtime = runtime;
+                let result = runtime.block_on({
+                    async move {
+                        let mut interval = interval(Duration::from_millis(500));
+                        'worker_loop: loop {
+                            let result = select! {
+                                message = worker_rx.recv() => {
+                                    match message {
+                                        Some(Message::Packet(packet)) => {
+                                            let sample = Sample {
+                                                data: Bytes::from(packet.data),
+                                                duration: packet.duration,
+                                                ..Default::default()
+                                            };
+                                            match (packet.typ, peer_connection.connection_state()) {
+                                                (_, RTCPeerConnectionState::Failed | RTCPeerConnectionState::Closed) => Err(WorkerResult::Error(OutputStreamError::NetworkError)),
+                                                (EncodedPacketType::Audio, _) => audio_track.write_sample(&sample).await.map_err(|e| WorkerResult::Error(OutputStreamError::WriteError(e))),
+                                                (EncodedPacketType::Video, _) => video_track.write_sample(&sample).await.map_err(|e| WorkerResult::Error(OutputStreamError::WriteError(e)))
+                                            }
+                                        },
+                                        Some(Message::Error(e)) => Err(WorkerResult::Error(e)),
+                                        Some(Message::Close) | None => Err(WorkerResult::Close),
+                                    }
+                                }
+                                _ = interval.tick() => {
+                                    let pc_stats = peer_connection.get_stats().await;
+
+                                    let stats = &mut stats.write().unwrap();
+                                    if let Some(StatsReportType::Transport(transport_stats)) = pc_stats.reports.get("ice_transport") {
+                                        stats.bytes_sent = transport_stats.bytes_sent as u64;
+                                    }
+                                    Ok(())
+                                }
+                            };
+
+                           if let Err(e) = result {
+                                break 'worker_loop e;
+                           }
+                        }
+
+                    }
+                });
+
+                match result {
+                    WorkerResult::Close => {}
+                    WorkerResult::Error(e) => {
+                        if let Some(callback) = &mut *error_callback.lock().unwrap() {
+                            error!("Worker encountered error: {e:?}");
+                            callback(e);
+                        }
+                    }
+                }
+
+                info!("Exiting worker thread");
+            }
+        });
+
+        *self.worker_handle.lock().unwrap() = Some(worker_handle);
+    }
+
     pub async fn new() -> Result<Self> {
         let video_track = Arc::new(TrackLocalStaticSample::new(
             RTCRtpCodecCapability {
@@ -150,143 +231,35 @@ impl OutputStream {
             ..Default::default()
         }));
 
-        let (worker_tx, mut worker_rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) =
+        let (worker_tx, worker_rx): (UnboundedSender<Message>, UnboundedReceiver<Message>) =
             mpsc::unbounded_channel();
         let error_callback: Arc<Mutex<Option<ErrorCallback>>> = Arc::new(Mutex::new(None));
 
-        let mut interval = interval(Duration::from_millis(500));
-        let worker_future: JoinHandle<()> = std::thread::spawn({
-            let audio_track = audio_track.clone();
-            let video_track = video_track.clone();
-            let peer_connection = peer_connection.clone();
-            let stats = stats.clone();
-            let error_callback = error_callback.clone();
-            move || {
-                let runtime = tokio::runtime::Builder::new_multi_thread()
-                    .enable_all()
-                    .thread_name("webrtc_worker")
-                    .worker_threads(2)
-                    .build()
-                    .unwrap();
-                let runtime = Arc::new(runtime);
-                runtime.block_on({
-                    let runtime = runtime.clone();
-                    async move {
-                        'worker: loop {
-                            select! {
-                                message = worker_rx.recv() => {
-                                    match message {
-                                        Some(Message::Packet(packet)) => {
-                                            let sample = Sample {
-                                                data: Bytes::from(packet.data),
-                                                duration: packet.duration,
-                                                ..Default::default()
-                                            };
-                                            match (packet.typ, peer_connection.connection_state()) {
-                                                (_, s @ RTCPeerConnectionState::Failed | s @ RTCPeerConnectionState::Closed) => {
-                                                    error!("Invalid connection state for write_video: {s}");
-
-                                                    // Close worker thread so callback doesn't trigger a message to the worker thread
-                                                    worker_rx.close();
-                                                    runtime.spawn_blocking(move || {
-                                                        if let Some(callback) = &mut *error_callback.lock().unwrap() {
-                                                            callback(OutputStreamError::NetworkError);
-                                                        }
-                                                    }).await.unwrap_or_else(|e| {
-                                                        error!("Failed executing error callback: {e}");
-                                                    });
-
-                                                    break 'worker;
-                                                }
-                                                (EncodedPacketType::Audio, _) => {
-                                                    if let Err(e) = audio_track.write_sample(&sample).await.map(|_| true) {
-                                                        error!("Failed writing to audio track: {e}");
-
-                                                        // Close worker thread so callback doesn't trigger a message to the worker thread
-                                                        worker_rx.close();
-                                                        runtime.spawn_blocking(move || {
-                                                            if let Some(callback) = &mut *error_callback.lock().unwrap() {
-                                                                callback(OutputStreamError::NetworkError);
-                                                            }
-                                                        }).await.unwrap_or_else(|e| {
-                                                            error!("Failed executing error callback: {e}");
-                                                        });
-
-                                                        break 'worker;
-                                                    };
-                                                }
-                                                (EncodedPacketType::Video, _) => {
-                                                    if let Err(e) = video_track.write_sample(&sample).await.map(|_| true) {
-                                                        error!("Failed writing to video track: {e}");
-
-                                                        // Close worker thread so callback doesn't trigger a message to the worker thread
-                                                        worker_rx.close();
-                                                        runtime.spawn_blocking(move || {
-                                                            if let Some(callback) = &mut *error_callback.lock().unwrap() {
-                                                                callback(OutputStreamError::NetworkError);
-                                                            }
-                                                        }).await.unwrap_or_else(|e| {
-                                                            error!("Failed executing error callback: {e}");
-                                                        });
-
-                                                        break 'worker;
-                                                    };
-
-                                                }
-                                            }
-                                        },
-                                        Some(Message::Error(e)) => {
-                                            // Close worker thread so callback doesn't trigger a message to the worker thread
-                                            worker_rx.close();
-                                            runtime.spawn_blocking(move || {
-                                                if let Some(callback) = &mut *error_callback.lock().unwrap() {
-                                                    callback(e);
-                                                }
-                                            }).await.unwrap_or_else(|e| {
-                                                error!("Failed executing error callback: {e}");
-                                            });
-
-                                            break 'worker;
-                                        }
-                                        Some(Message::Close) | None => break 'worker,
-                                    }
-                                }
-                                _ = interval.tick() => {
-                                    let pc_stats = peer_connection.get_stats().await;
-
-                                    let stats = &mut stats.write().unwrap();
-                                    if let Some(StatsReportType::Transport(transport_stats)) = pc_stats.reports.get("ice_transport") {
-                                        stats.bytes_sent = transport_stats.bytes_sent as u64;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-                info!("Exiting worker thread");
-            }
-        });
-
-        Ok(Self {
+        let mut output_stream = Self {
             audio_track,
             video_track,
             peer_connection,
             stats,
             worker_tx,
-            worker_future: Arc::new(Mutex::new(Some(worker_future))),
+            worker_handle: Arc::new(Mutex::new(None)),
             whip_resource: Arc::new(Mutex::new(None)),
             error_callback,
-        })
+        };
+
+        output_stream.start_worker(worker_rx);
+
+        Ok(output_stream)
     }
 
-    pub async fn connect(&self, url: &str, bearer_token: Option<&str>) -> Result<()> {
-        self.connect_internal(url, bearer_token).await.map_err(|e| {
-            error!("Failed connecting to: {e}");
-            let _ = self
-                .worker_tx
-                .send(Message::Error(OutputStreamError::ConnectFailed));
-            e
-        })
+    pub async fn connect(&self, url: &str, bearer_token: Option<&str>) {
+        self.connect_internal(url, bearer_token)
+            .await
+            .unwrap_or_else(|e| {
+                error!("Failed connecting to: {e}");
+                let _ = self
+                    .worker_tx
+                    .send(Message::Error(OutputStreamError::ConnectFailed));
+            })
     }
 
     async fn connect_internal(&self, url: &str, bearer_token: Option<&str>) -> Result<()> {
@@ -353,7 +326,7 @@ impl OutputStream {
         let close_result = self.worker_tx.send(Message::Close);
 
         // Take worker handle so it's dropped
-        let worker_future = self.worker_future.lock().unwrap().take();
+        let worker_future = self.worker_handle.lock().unwrap().take();
         // If close was a success (worker could receive messages), join on thread
         // Otherwise, worker thread is already dead or currently closing due to error callback
         if close_result.is_ok() {

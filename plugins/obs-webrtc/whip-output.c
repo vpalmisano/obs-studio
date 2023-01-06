@@ -127,7 +127,7 @@ static void whip_output_stop(void *data, uint64_t ts)
 	whip_output_close_unsafe(output);
 	pthread_mutex_unlock(&output->write_mutex);
 
-	obs_output_end_data_capture(output->output);
+	obs_output_signal_stop(output->output, OBS_OUTPUT_SUCCESS);
 }
 
 static void whip_output_data(void *data, struct encoder_packet *packet)

@@ -24,6 +24,7 @@ impl From<OutputStreamError> for OBSWebRTCWHIPOutputError {
         match ose {
             OutputStreamError::ConnectFailed => OBSWebRTCWHIPOutputError::ConnectFailed,
             OutputStreamError::NetworkError => OBSWebRTCWHIPOutputError::NetworkError,
+            OutputStreamError::WriteError(_) => OBSWebRTCWHIPOutputError::NetworkError,
         }
     }
 }
@@ -117,17 +118,7 @@ pub unsafe extern "C" fn obs_webrtc_whip_output_connect(
     };
 
     output.runtime.spawn(async move {
-        let result = output.stream.connect(&url, bearer_token.as_deref()).await;
-        if let Err(e) = result {
-            error!("Failed connecting to whip output: {e:?}");
-            // Close the peer connection so that future writes fail and disconnect the output
-            // TODO: There should be some nuance about a connection failure and a mid-connection failure
-            output
-                .stream
-                .close()
-                .await
-                .unwrap_or_else(|e| error!("Failed closing whip output after error: {e:?}"));
-        }
+        output.stream.connect(&url, bearer_token.as_deref()).await;
     });
 }
 
