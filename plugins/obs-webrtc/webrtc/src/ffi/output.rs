@@ -35,7 +35,7 @@ impl From<OutputStreamError> for OBSWebRTCWHIPOutputError {
 pub extern "C" fn obs_webrtc_whip_output_new() -> *mut OBSWebRTCWHIPOutput {
     (|| -> Result<*mut OBSWebRTCWHIPOutput> {
         let runtime = tokio::runtime::Runtime::new()?;
-        let stream = runtime.block_on(async { OutputStream::new().await })?;
+        let stream = runtime.block_on(OutputStream::new())?;
         Ok(Box::into_raw(Box::new(OBSWebRTCWHIPOutput {
             stream,
             runtime,
