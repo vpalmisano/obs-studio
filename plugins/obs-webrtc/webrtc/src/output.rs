@@ -182,26 +182,28 @@ impl OutputStream {
         let mut registry = Registry::new();
         registry = register_default_interceptors(registry, &mut m)?;
 
-        let gather_ips = if_addrs::get_if_addrs()
+        let gather_ips: Vec<_> = if_addrs::get_if_addrs()
             .unwrap_or_else(|_| Vec::new())
-            .iter()
-            .fold(Vec::new(), |mut gather_ips, addr| {
+            .into_iter()
+            .filter(|addr| {
                 if !addr.is_loopback() {
                     trace!(
                         "Valid gather address for interface {}: {:#?}",
                         addr.name,
                         addr.ip()
                     );
-                    gather_ips.push(addr.ip());
+                    true
                 } else {
                     trace!(
                         "Loopback address ignored for interface {}: {:#?}",
                         addr.name,
                         addr.ip()
                     );
+                    false
                 }
-                gather_ips
-            });
+            })
+            .map(|addr| addr.ip())
+            .collect();
 
         let mut setting_engine = SettingEngine::default();
 
