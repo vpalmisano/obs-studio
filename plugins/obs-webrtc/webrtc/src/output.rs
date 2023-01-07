@@ -96,7 +96,7 @@ impl OutputStream {
                     .build()
                     .unwrap();
                 let runtime = runtime;
-                let result = runtime.block_on({
+                let result = runtime.block_on(
                     async move {
                         let mut interval = interval(Duration::from_millis(500));
                         'worker_loop: loop {
@@ -134,9 +134,8 @@ impl OutputStream {
                                 break 'worker_loop e;
                            }
                         }
-
                     }
-                });
+                );
 
                 match result {
                     WorkerResult::Close => {}
