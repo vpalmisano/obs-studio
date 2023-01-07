@@ -21,6 +21,7 @@ use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
 use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::stats::StatsReportType;
 use webrtc::track::track_local::track_local_static_sample::TrackLocalStaticSample;
@@ -265,16 +266,21 @@ impl OutputStream {
     async fn connect_internal(&self, url: &str, bearer_token: Option<&str>) -> Result<()> {
         println!("Setting up webrtc!");
 
-        self.peer_connection.add_transceiver_from_track(self.video_track.clone(), &[RTCRtpTransceiverInit {
-            direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
-            send_encodings: Vec::new()
-        }]).await?;
+        self.peer_connection
+            .add_transceiver_from_track(
+                self.video_track.clone(),
+                &[RTCRtpTransceiverInit {
+                    direction: RTCRtpTransceiverDirection::Sendonly,
+                    send_encodings: Vec::new(),
+                }],
+            )
+            .await?;
 
         self.peer_connection
             .add_transceiver_from_track(
                 self.audio_track.clone(),
                 &[RTCRtpTransceiverInit {
-                    direction: webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection::Sendonly,
+                    direction: RTCRtpTransceiverDirection::Sendonly,
                     send_encodings: Vec::new(),
                 }],
             )
