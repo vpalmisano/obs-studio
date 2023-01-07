@@ -58,6 +58,9 @@ static int map_whip_error_to_obs_output_error(OBSWebRTCWHIPOutputError error)
 		return OBS_OUTPUT_CONNECT_FAILED;
 	case OBSWebRTCWHIPOutputError_NetworkError:
 		return OBS_OUTPUT_ERROR;
+	default:
+		blog(LOG_ERROR, "Invalid whip error code: %d", error);
+		return OBS_OUTPUT_ERROR;
 	}
 }
 
