@@ -7,7 +7,7 @@ build = "build.rs"
 [dependencies]
 webrtc = "0.6.0"
 webrtc-mdns = "0.5.2"
-tokio = { version = "1.16.1", features = ["full"] }
+tokio = "1.16.1"
 anyhow = "1.0.45"
 bytes = "1"
 serde = { version = "1.0", features = ["derive"] }
