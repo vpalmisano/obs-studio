@@ -2511,8 +2511,6 @@ dependencies = [
  "log",
  "reqwest",
  "serde",
- "serde_derive",
- "serde_json",
  "tokio",
  "webrtc",
  "webrtc-mdns",
