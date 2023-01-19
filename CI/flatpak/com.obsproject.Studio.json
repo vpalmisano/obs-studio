@@ -7,12 +7,6 @@
     "org.freedesktop.Sdk.Extension.rust-stable"
   ],
   "command": "obs",
-  "build-options": {
-    "append-path" : "/usr/lib/sdk/rust-stable/bin",
-    "env" : {
-      "CARGO_NET_OFFLINE": "true"
-    }
-  },
   "finish-args": [
     "--socket=wayland",
     "--socket=x11",
@@ -57,7 +51,9 @@
       "name": "corrosion",
       "buildsystem": "cmake-ninja",
       "build-options": {
+        "append-path" : "/usr/lib/sdk/rust-stable/bin",
         "env" : {
+          "CARGO_NET_OFFLINE": "true",
           "CARGO_HOME": "/run/build/corrosion/cargo"
         }
       },
@@ -441,7 +437,9 @@
       "name": "obs",
       "buildsystem": "cmake-ninja",
       "build-options": {
+        "append-path" : "/usr/lib/sdk/rust-stable/bin",
         "env" : {
+          "CARGO_NET_OFFLINE": "true",
           "CARGO_HOME": "/run/build/obs/cargo"
         }
       },
