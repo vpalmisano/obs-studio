@@ -70,11 +70,7 @@
           "tag": "v0.3.1",
           "commit": "d5f95be5afea522da1436086dc4f3d65b0fa8999"
         },
-        {
-            "type": "dir",
-            "path": "."
-        },
-        "../../plugins/obs-webrtc/webrtc/corrosion-cargo-sources.json"
+        "corrosion-cargo-sources.json"
       ]
     },
     {
@@ -476,7 +472,7 @@
           "type": "dir",
           "path": "../../"
         },
-        "../../plugins/obs-webrtc/webrtc/obs-cargo-sources.json"
+        "obs-cargo-sources.json"
       ]
     }
   ]
