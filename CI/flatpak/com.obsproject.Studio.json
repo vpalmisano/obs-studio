@@ -9,9 +9,9 @@
   "command": "obs",
   "build-options": {
     "append-path" : "/usr/lib/sdk/rust-stable/bin",
-    "env" : [
-      "CARGO_NET_OFFLINE=true"
-    ]
+    "env" : {
+      "CARGO_NET_OFFLINE": "true"
+    }
   },
   "finish-args": [
     "--socket=wayland",
@@ -57,9 +57,9 @@
       "name": "corrosion",
       "buildsystem": "cmake-ninja",
       "build-options": {
-        "env" : [
-          "CARGO_HOME=/run/build/corrosion/cargo"
-        ]
+        "env" : {
+          "CARGO_HOME": "/run/build/corrosion/cargo"
+        }
       },
       "config-opts": [
         "-DCMAKE_BUILD_TYPE=Release"
@@ -441,9 +441,9 @@
       "name": "obs",
       "buildsystem": "cmake-ninja",
       "build-options": {
-        "env" : [
-          "CARGO_HOME=/run/build/obs/cargo"
-        ]
+        "env" : {
+          "CARGO_HOME": "/run/build/obs/cargo"
+        }
       },
       "builddir": true,
       "config-opts": [
