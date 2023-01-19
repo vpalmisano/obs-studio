@@ -1,0 +1,19 @@
+name: Flatpak Crate Check
+
+on:
+  push:
+    paths-ignore: ['**.md']
+    branches-ignore: [master]
+  pull_request:
+    paths-ignore: ['**.md']
+    branches-ignore: [master]
+
+jobs:
+  clang-format-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 'Run '
+        run: |
+          pip3 install toml aiohttp
+          ./CI/check-flatpak-crates.sh
+          ./CI/check-changes.sh
