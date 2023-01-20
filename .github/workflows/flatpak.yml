@@ -72,7 +72,7 @@ jobs:
         with:
           bundle: obs-studio-${{ steps.setup.outputs.commitHash }}.flatpak
           manifest-path: CI/flatpak/com.obsproject.Studio.json
-          cache-key: flatpak-builder-${{ hashFiles('CI/flatpak/com.obsproject.Studio.json') }}
+          cache-key: flatpak-builder-${{ hashFiles('CI/flatpak/com.obsproject.Studio.json', 'CI/flatpak/*-cargo-sources.json') }}
           mirror-screenshots-url: https://dl.flathub.org/repo/screenshots
           branch: ${{ matrix.branch }}
 

@@ -1,0 +1,26 @@
+name: Cargo lock check
+
+on:
+  push:
+    paths:
+      - "**/Cargo.lock"
+  pull_request:
+    paths:
+      - "**/Cargo.lock"
+
+jobs:
+  cargo-lock-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+
+      - name: 'Install check-cargo-locks deps'
+        run: sudo pip install toml aiohttp
+
+      - name: 'Run check-cargo-locks'
+        run: |
+          ./CI/check-cargo-locks.sh
+          ./CI/check-changes.sh
