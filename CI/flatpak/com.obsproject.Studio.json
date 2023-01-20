@@ -3,6 +3,9 @@
   "runtime": "org.kde.Platform",
   "runtime-version": "6.4",
   "sdk": "org.kde.Sdk",
+  "sdk-extensions" : [
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
   "command": "obs",
   "finish-args": [
     "--socket=wayland",
@@ -44,6 +47,32 @@
     "*.la"
   ],
   "modules": [
+    {
+      "name": "corrosion",
+      "buildsystem": "cmake-ninja",
+      "build-options": {
+        "append-path" : "/usr/lib/sdk/rust-stable/bin",
+        "env" : {
+          "CARGO_NET_OFFLINE": "true",
+          "CARGO_HOME": "/run/build/corrosion/cargo"
+        }
+      },
+      "config-opts": [
+        "-DCMAKE_BUILD_TYPE=Release"
+      ],
+      "cleanup": [
+        "*"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/corrosion-rs/corrosion.git",
+          "tag": "v0.3.1",
+          "commit": "d5f95be5afea522da1436086dc4f3d65b0fa8999"
+        },
+        "corrosion-cargo-sources.json"
+      ]
+    },
     {
       "name": "x264",
       "config-opts": [
@@ -403,6 +432,13 @@
     {
       "name": "obs",
       "buildsystem": "cmake-ninja",
+      "build-options": {
+        "append-path" : "/usr/lib/sdk/rust-stable/bin",
+        "env" : {
+          "CARGO_NET_OFFLINE": "true",
+          "CARGO_HOME": "/run/build/obs/cargo"
+        }
+      },
       "builddir": true,
       "config-opts": [
         "-DCMAKE_BUILD_TYPE=Release",
@@ -435,7 +471,8 @@
         {
           "type": "dir",
           "path": "../../"
-        }
+        },
+        "webrtc-cargo-sources.json"
       ]
     }
   ]
