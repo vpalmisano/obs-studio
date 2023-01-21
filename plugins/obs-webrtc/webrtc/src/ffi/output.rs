@@ -126,13 +126,23 @@ pub unsafe extern "C" fn obs_webrtc_whip_output_connect(
 /// # Note
 /// Once closed, you cannot call `obs_webrtc_whip_output_connect` again
 #[no_mangle]
-pub extern "C" fn obs_webrtc_whip_output_close(output: &'static OBSWebRTCWHIPOutput) {
+pub unsafe extern "C" fn obs_webrtc_whip_output_close(output: &'static OBSWebRTCWHIPOutput, bearer_token: *const c_char) {
     info!("Closing whip output");
+    let bearer_token = if !bearer_token.is_null() {
+        Some(
+            std::ffi::CStr::from_ptr(bearer_token)
+                .to_str()
+                .unwrap()
+                .to_owned(),
+        )
+    } else {
+        None
+    };
     output
         .runtime
         .block_on(async {
             info!("I'm on a thread!");
-            output.stream.close().await
+            output.stream.close(bearer_token.as_deref()).await
         })
         .unwrap_or_else(|e| error!("Failed closing whip output: {e:?}"))
 }

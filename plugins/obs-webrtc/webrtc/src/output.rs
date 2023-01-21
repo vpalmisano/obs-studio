@@ -379,7 +379,7 @@ impl OutputStream {
         Ok(())
     }
 
-    pub async fn close(&self) -> Result<()> {
+    pub async fn close(&self, bearer_token: Option<&str>) -> Result<()> {
         let close_result = self.worker_tx.send(Message::Close);
 
         // Take worker handle so it's dropped
@@ -396,7 +396,7 @@ impl OutputStream {
 
         let whip_resource = self.whip_resource.lock().unwrap().take();
         if let Some(whip_resource) = whip_resource {
-            whip::delete(&whip_resource).await?;
+            whip::delete(&whip_resource, bearer_token).await?;
         }
         Ok(self.peer_connection.close().await?)
     }

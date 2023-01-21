@@ -54,7 +54,14 @@ pub async fn offer(
 
     let mut url = response.url().to_owned();
     if let Some(location) = response.headers().get(LOCATION) {
-        url.set_path(location.to_str()?);
+        let location_url = Url::parse(location.to_str()?)?;
+        if location_url.scheme().len() > 0 {
+            url.set_scheme(location_url.scheme()).unwrap();
+        }
+        if location_url.has_host() {
+            url.set_host(location_url.host_str())?;
+        }
+        url.set_path(location_url.path());
     }
 
     let body = response.text().await?;
@@ -67,13 +74,28 @@ pub async fn offer(
     Ok((sdp, url))
 }
 
-pub async fn delete(url: &Url) -> Result<()> {
+pub async fn delete(
+    url: &Url,
+    bearer_token: Option<&str>,
+) -> Result<()> {
     let client = reqwest::Client::new();
 
-    let request = client.delete(url.to_owned()).header(
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
         USER_AGENT,
         HeaderValue::from_str(&format!("libobs/{OBS_VERSION}"))?,
     );
+
+    if let Some(bearer_token) = bearer_token {
+        if !bearer_token.is_empty() {
+            headers.insert(
+                AUTHORIZATION,
+                HeaderValue::from_str(&format!("Bearer {bearer_token}"))?,
+            );
+        }
+    }
+
+    let request = client.delete(url.to_owned()).headers(headers);
 
     if obs_log::debug_whip() {
         info!("[WHIP DEBUG | CAUTION SENSITIVE INFO] Delete request {request:#?}");

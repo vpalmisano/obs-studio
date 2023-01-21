@@ -2,8 +2,21 @@
 
 static void whip_output_close_unsafe(struct whip_output *output)
 {
+	obs_service_t *service;
+	obs_data_t *service_settings;
+	const char *url, *bearer_token;
+
 	if (output && output->whip_output) {
-		obs_webrtc_whip_output_close(output->whip_output);
+		service = obs_output_get_service(output->output);
+		if (!service)
+			return;
+
+		service_settings = obs_service_get_settings(service);
+		if (!service_settings)
+			return;
+
+		bearer_token = obs_data_get_string(service_settings, "bearer_token");
+		obs_webrtc_whip_output_close(output->whip_output, bearer_token);
 		obs_webrtc_whip_output_free(output->whip_output);
 		output->whip_output = NULL;
 	}
